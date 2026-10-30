@@ -1,0 +1,1016 @@
+অবশ্যই! আমি পুরো অ্যান্ড্রয়েড অ্যাপটির (Kotlin + Jetpack Compose) কোড ধাপে ধাপে সাজিয়ে দিচ্ছি। যাতে আপনি সরাসরি Android Studio-তে কপি-পেস্ট করে অ্যাপটি রান করতে পারেন।
+
+আমরা এখানে MVVM (Model-View-ViewModel) আর্কিটেকচার এবং Jetpack Navigation ব্যবহার করব, যা একটি প্রফেশনাল অ্যান্ড্রয়েড অ্যাপের স্ট্যান্ডার্ড পদ্ধতি।
+
+---
+
+📁 ধাপ ১: প্রজেক্ট তৈরি ও ডিপেন্ডেন্সি সেটআপ
+
+১. Android Studio খুলুন এবং Empty Compose Activity সিলেক্ট করে একটি প্রজেক্ট তৈরি করুন (প্যাকেজ নাম: com.example.ispapp)।
+২. বাম দিকের মেনু থেকে Gradle Scripts -> build.gradle.kts (Module :app) ফাইলটি খুলুন।
+৩. dependencies { ... } ব্লকের ভেতরে নিচের লাইনগুলো যোগ করুন (যদি আগে থেকে না থাকে):
+
+```kotlin
+dependencies {
+    // ... অন্যান্য ডিফল্ট ডিপেন্ডেন্সি
+    
+    // Navigation Compose (পেজ পরিবর্তনের জন্য)
+    implementation("androidx.navigation:navigation-compose:2.7.7")
+    
+    // ViewModel for Compose (স্টেট ম্যানেজমেন্টের জন্য)
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    
+    // Icons Extended (সব ধরনের আইকনের জন্য)
+    implementation("androidx.compose.material:material-icons-extended:1.6.1")
+}
+```
+
+এরপর উপরে ডানদিকে "Sync Now" এ ক্লিক করুন।
+
+---
+
+🎨 ধাপ ২: কালার ফাইল (ui/theme/Color.kt)
+
+প্যাকেজের ভেতরে ui/theme/Color.kt ফাইলটি খুলে নিচের কোড দিন:
+
+```kotlin
+package com.example.ispapp.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+val BluePrimary = Color(0xFF3B82F6)
+val GreenOnline = Color(0xFF10B981)
+val RedWiredCut = Color(0xFFEF4444)
+val YellowPowerOff = Color(0xFFF59E0B)
+val GrayBg = Color(0xFFF8FAFC)
+val GrayText = Color(0xFF64748B)
+```
+
+---
+
+📊 ধাপ ৩: ডেটা মডেল (model/DataModels.kt)
+
+প্রজেক্টে model নামে একটি প্যাকেজ তৈরি করুন এবং সেখানে DataModels.kt ফাইল তৈরি করুন:
+
+```kotlin
+package com.example.ispapp.model
+
+// PON ইন্টারফেসের ডেটা মডেল
+data class PonInterface(
+    val id: String,
+    val type: String = "EPON PX...",
+    val status: String, // "optimal", "degraded", "down"
+    val txPower: String,
+    val sfpTemp: String,
+    val voltage: String,
+    val laserBias: String,
+    val connected: Int,
+    val maxOnu: Int,
+    val online: Int,
+    val powerOff: Int,
+    val wiredCut: Int
+)
+
+// ONU ডেটা মডেল
+data class OnuItem(
+    val id: Int,
+    val user: String,
+    val status: String, // "online", "wirecut", "poweroff"
+    val fdb: String,
+    val ip: String,
+    val uptime: String,
+    val port: String,
+    val sn: String,
+    val rx: String,
+    val tx: String,
+    val distance: String
+)
+
+// OLT ডেটা মডেল
+data class OltItem(
+    val id: Long,
+    val name: String,
+    val ip: String,
+    val location: String,
+    val user: String,
+    val snmpVersion: String,
+    val community: String,
+    val status: String // "online", "offline"
+)
+```
+
+---
+
+🧠 ধাপ ৪: ভিউমডেল (viewmodel/MainViewModel.kt)
+
+viewmodel প্যাকেজ তৈরি করে MainViewModel.kt ফাইল তৈরি করুন। এখানে অ্যাপের সব লজিক থাকবে:
+
+```kotlin
+package com.example.ispapp.viewmodel
+
+import androidx.lifecycle.ViewModel
+import com.example.ispapp.model.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+
+class MainViewModel : ViewModel() {
+
+    // --- ১. ড্যাশবোর্ড লাইভ ডেটা ---
+    private val _cpuUsage = MutableStateFlow(20)
+    val cpuUsage: StateFlow<Int> = _cpuUsage
+    
+    private val _ramUsage = MutableStateFlow(17)
+    val ramUsage: StateFlow<Int> = _ramUsage
+    
+    private val _temperature = MutableStateFlow(51)
+    val temperature: StateFlow<Int> = _temperature
+
+    // --- ২. PON ডেটা ---
+    private val _ponList = MutableStateFlow<List<PonInterface>>(emptyList())
+    val ponList: StateFlow<List<PonInterface>> = _ponList
+
+    // --- ৩. ONU ডেটা ---
+    private val _onuList = MutableStateFlow<List<OnuItem>>(emptyList())
+    val onuList: StateFlow<List<OnuItem>> = _onuList
+
+    // --- ৪. OLT ডেটা ---
+    private val _oltList = MutableStateFlow<List<OltItem>>(emptyList())
+    val oltList: StateFlow<List<OltItem>> = _oltList
+
+    init {
+        // অ্যাপ চালু হওয়ার সাথে সাথে ডেমো ডেটা লোড হবে
+        loadDemoData()
+    }
+
+    private fun loadDemoData() {
+        _ponList.value = listOf(
+            PonInterface("EPON0/1", status = "optimal", txPower = "+9.19 dBm", sfpTemp = "36.1°C", voltage = "3.26V", laserBias = "26.0 mA", connected = 58, maxOnu = 64, online = 54, powerOff = 0, wiredCut = 4),
+            PonInterface("EPON0/2", status = "down", txPower = "+9.24 dBm", sfpTemp = "38.9°C", voltage = "3.28V", laserBias = "10.8 mA", connected = 0, maxOnu = 64, online = 0, powerOff = 0, wiredCut = 0),
+            PonInterface("EPON0/3", status = "optimal", txPower = "+9.22 dBm", sfpTemp = "38.9°C", voltage = "3.28V", laserBias = "15.7 mA", connected = 40, maxOnu = 64, online = 38, powerOff = 0, wiredCut = 2)
+        )
+
+        _onuList.value = listOf(
+            OnuItem(1, "53-shanto", "online", "99.8%", "10.0.2.198", "10h54m21s", "EPON0/1:1", "A07E02263120", "-21.4 dBm", "+1.9 dBm", "138 m"),
+            OnuItem(2, "44-anamul", "online", "99.8%", "10.0.2.219", "10h55m1s", "EPON0/1:2", "00D39E8FBA98", "-19.8 dBm", "+2.6 dBm", "146 m"),
+            OnuItem(3, "rajib-99", "wirecut", "0%", "-", "-", "EPON0/1:4", "A07E02263199", "No Signal", "-", "-"),
+            OnuItem(4, "shamim_01", "poweroff", "0%", "10.0.2.150", "-", "EPON0/1:5", "00D39E8FBB01", "No Signal", "-", "-")
+        )
+
+        _oltList.value = listOf(
+            OltItem(1, "V.SOL V1600D4-DP", "180.94.28.100", "মিরপুর ব্রাঞ্চ", "admin", "v2c", "public", "online"),
+            OltItem(2, "HSGQ-E08R", "103.112.55.20", "উত্তর সেক্টর-৭", "admin", "v3", "private", "offline")
+        )
+    }
+
+    // লাইভ ডেটা সিমুলেশন (প্রতি ৩ সেকেন্ডে আপডেট হবে)
+    fun simulateLiveData() {
+        _cpuUsage.value = (10..40).random()
+        _ramUsage.value = (15..35).random()
+        _temperature.value = (45..60).random()
+    }
+
+    // OLT অ্যাড, এডিট, ডিলিট লজিক
+    fun addOlt(olt: OltItem) {
+        _oltList.value = _oltList.value + olt
+    }
+
+    fun updateOlt(updatedOlt: OltItem) {
+        _oltList.value = _oltList.value.map { if (it.id == updatedOlt.id) updatedOlt else it }
+    }
+
+    fun deleteOlt(id: Long) {
+        _oltList.value = _oltList.value.filter { it.id != id }
+    }
+}
+```
+
+---
+
+🏠 ধাপ ৫: ড্যাশবোর্ড স্ক্রিন (screens/DashboardScreen.kt)
+
+screens প্যাকেজ তৈরি করে ফাইলটি বানান:
+
+```kotlin
+package com.example.ispapp.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ispapp.ui.theme.*
+import com.example.ispapp.viewmodel.MainViewModel
+import kotlinx.coroutines.delay
+
+@Composable
+fun DashboardScreen(viewModel: MainViewModel) {
+    val cpu by viewModel.cpuUsage.collectAsState()
+    val ram by viewModel.ramUsage.collectAsState()
+    val temp by viewModel.temperature.collectAsState()
+
+    // লাইভ ডেটা সিমুলেশন (প্রতি ৩ সেকেন্ডে আপডেট)
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(3000)
+            viewModel.simulateLiveData()
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GrayBg)
+            .padding(16.dp)
+    ) {
+        // হেডার
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("V.SOL V1600D4-DP", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("180.94.28.100 SNMP 161", fontSize = 10.sp, color = GrayText)
+            }
+            Box(
+                modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFFDBEAFE)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Notifications, contentDescription = "Notification", tint = BluePrimary, modifier = Modifier.size(20.dp))
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ডিভাইস ইনফো কার্ড
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFFEF2F2)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("V-SOL", color = Color.Red, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("V.SOL V1600D4-DP", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Uptime: 1d 9h 21m 49s", fontSize = 10.sp, color = GrayText)
+                    }
+                }
+                Text("Online", color = GreenOnline, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // সিস্টেম হেলথ কার্ড
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("সিস্টেম স্বাস্থ্য ও টেলিমেট্রি", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    MetricCircle("$cpu%", "CPU", BluePrimary)
+                    MetricCircle("$ram%", "RAM", BluePrimary)
+                    MetricCircle("${temp}°C", "তাপমাত্রা", if (temp > 55) RedWiredCut else YellowPowerOff)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // PON পোর্ট স্ট্যাটাস কার্ড
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("মোট PON পোর্ট সক্রিয়", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("4", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = GreenOnline)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("100% চালু", color = GreenOnline, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun MetricCircle(value: String, label: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier.size(64.dp).clip(CircleShape).background(color.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = color)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+```
+
+---
+
+🛰️ ধাপ ৬: PON স্ক্রিন (screens/PonScreen.kt)
+
+```kotlin
+package com.example.ispapp.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ispapp.model.PonInterface
+import com.example.ispapp.ui.theme.*
+import com.example.ispapp.viewmodel.MainViewModel
+
+@Composable
+fun PonScreen(viewModel: MainViewModel) {
+    val ponList by viewModel.ponList.collectAsState()
+    var selectedFilter by remember { mutableStateOf("all") }
+
+    val filteredList = remember(ponList, selectedFilter) {
+        if (selectedFilter == "all") ponList else ponList.filter { it.status == selectedFilter }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GrayBg)
+            .padding(16.dp)
+    ) {
+        Text("PON Interfaces (${ponList.size})", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text("HSGQ-E08R • EPON PX20++", fontSize = 12.sp, color = GrayText)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ফিল্টার বাটন
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterButton("All (${ponList.size})", selectedFilter == "all") { selectedFilter = "all" }
+            FilterButton("Optimal (${ponList.count { it.status == "optimal" }})", selectedFilter == "optimal") { selectedFilter = "optimal" }
+            FilterButton("Down (${ponList.count { it.status == "down" }})", selectedFilter == "down") { selectedFilter = "down" }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(filteredList) { pon ->
+                PonCard(pon)
+            }
+        }
+    }
+}
+
+@Composable
+fun FilterButton(text: String, isSelected: Boolean, onClick: () -> Unit) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isSelected) BluePrimary else Color.White,
+            contentColor = if (isSelected) Color.White else GrayText
+        ),
+        shape = RoundedCornerShape(50),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+        modifier = Modifier.height(32.dp)
+    ) {
+        Text(text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+fun PonCard(pon: PonInterface) {
+    val isActive = pon.status == "optimal"
+    val statusColor = if (isActive) GreenOnline else YellowPowerOff
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(pon.id, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(
+                    text = if (isActive) "✓ Active" else "⚠ Port Down",
+                    color = statusColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                InfoColumn("Tx Power", pon.txPower, GreenOnline)
+                InfoColumn("SFP Temp", pon.sfpTemp, Color.DarkGray)
+                InfoColumn("Voltage", pon.voltage, Color.DarkGray)
+                InfoColumn("Laser Bias", pon.laserBias, BluePrimary)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("Connected: ${pon.connected} / ${pon.maxOnu} ONUs", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                StatusText("Online", pon.online, GreenOnline)
+                StatusText("Power Off", pon.powerOff, YellowPowerOff)
+                StatusText("Wired Cut", pon.wiredCut, RedWiredCut)
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoColumn(title: String, value: String, valueColor: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, fontSize = 10.sp, color = GrayText)
+        Text(value, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = valueColor)
+    }
+}
+
+@Composable
+fun StatusText(title: String, count: Int, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(color))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text("$title: $count", fontSize = 11.sp, color = Color.Gray)
+    }
+}
+```
+
+---
+
+📡 ধাপ ৭: ONU লিস্ট স্ক্রিন (screens/OnuListScreen.kt)
+
+```kotlin
+package com.example.ispapp.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ispapp.ui.theme.*
+import com.example.ispapp.viewmodel.MainViewModel
+
+@Composable
+fun OnuListScreen(viewModel: MainViewModel) {
+    val onuList by viewModel.onuList.collectAsState()
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("all") }
+
+    val filteredList = remember(onuList, searchQuery, selectedFilter) {
+        onuList.filter { onu ->
+            (selectedFilter == "all" || onu.status == selectedFilter) &&
+            (onu.user.contains(searchQuery, ignoreCase = true) || onu.sn.contains(searchQuery, ignoreCase = true))
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GrayBg)
+            .padding(16.dp)
+    ) {
+        Text("ONU তালিকা: EPON0/1", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("V.SOL V1600D4-DP | ${onuList.size} ONUs", fontSize = 10.sp, color = GrayText)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // স্ট্যাটস
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            StatBox("মোট", onuList.size, Color.DarkGray)
+            StatBox("অনলাইন", onuList.count { it.status == "online" }, GreenOnline)
+            StatBox("ওয়ার কাট", onuList.count { it.status == "wirecut" }, RedWiredCut)
+            StatBox("পাওয়ার অফ", onuList.count { it.status == "poweroff" }, YellowPowerOff)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // সার্চ বার
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("SN, MAC বা ইউজারনেম খুঁজুন", fontSize = 12.sp) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ফিল্টার
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterButton("সব (${onuList.size})", selectedFilter == "all") { selectedFilter = "all" }
+            FilterButton("অনলাইন", selectedFilter == "online") { selectedFilter = "online" }
+            FilterButton("ওয়ার কাট", selectedFilter == "wirecut") { selectedFilter = "wirecut" }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(filteredList) { onu ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(onu.user, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                text = when (onu.status) {
+                                    "online" -> "✓ অনলাইন"
+                                    "wirecut" -> "✗ ওয়ার কাট"
+                                    else -> "⚠ পাওয়ার অফ"
+                                },
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (onu.status) {
+                                    "online" -> GreenOnline
+                                    "wirecut" -> RedWiredCut
+                                    else -> YellowPowerOff
+                                }
+                            )
+                        }
+                        Text("${onu.port} • SN: ${onu.sn}", fontSize = 10.sp, color = GrayText)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            MiniInfo("Rx", onu.rx, GreenOnline)
+                            MiniInfo("Tx", onu.tx, Color.DarkGray)
+                            MiniInfo("Distance", onu.distance, BluePrimary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatBox(label: String, count: Int, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("$count", fontWeight = FontWeight.Bold, color = color, fontSize = 16.sp)
+        Text(label, fontSize = 10.sp, color = GrayText)
+    }
+}
+
+@Composable
+fun MiniInfo(title: String, value: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, fontSize = 9.sp, color = GrayText)
+        Text(value, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = color)
+    }
+}
+```
+
+---
+
+🗄️ ধাপ ৮: OLT লিস্ট স্ক্রিন (screens/OltListScreen.kt)
+
+এখানে ডেটা অ্যাড, এডিট এবং ডিলিট করার জন্য একটি পপ-আপ (Dialog) ব্যবহার করা হয়েছে:
+
+```kotlin
+package com.example.ispapp.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.ispapp.model.OltItem
+import com.example.ispapp.ui.theme.*
+import com.example.ispapp.viewmodel.MainViewModel
+
+@Composable
+fun OltListScreen(viewModel: MainViewModel) {
+    val oltList by viewModel.oltList.collectAsState()
+    var showDialog by remember { mutableStateOf(false) }
+    var editingOlt by remember { mutableStateOf<OltItem?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var deleteTargetId by remember { mutableStateOf<Long?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(GrayBg)
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("OLT ম্যানেজমেন্ট", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("মোট ডিভাইস: ${oltList.size}টি", fontSize = 12.sp, color = GrayText)
+            }
+            IconButton(
+                onClick = { editingOlt = null; showDialog = true },
+                modifier = Modifier.clip(CircleShape).background(BluePrimary)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(oltList) { olt ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text(olt.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(olt.location, fontSize = 10.sp, color = GrayText)
+                            }
+                            Text(
+                                olt.status.uppercase(),
+                                color = if (olt.status == "online") GreenOnline else RedWiredCut,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("IP: ${olt.ip} | SNMP: ${olt.snmpVersion}", fontSize = 11.sp, color = GrayText)
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { editingOlt = olt; showDialog = true }) {
+                                Text("এডিট", fontSize = 12.sp, color = BluePrimary)
+                            }
+                            TextButton(onClick = { deleteTargetId = olt.id; showDeleteDialog = true }) {
+                                Text("ডিলিট", fontSize = 12.sp, color = RedWiredCut)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // অ্যাড / এডিট করার ডায়ালগ
+    if (showDialog) {
+        OltFormDialog(
+            existingOlt = editingOlt,
+            onDismiss = { showDialog = false },
+            onSave = { olt ->
+                if (editingOlt == null) viewModel.addOlt(olt) else viewModel.updateOlt(olt)
+                showDialog = false
+            }
+        )
+    }
+
+    // ডিলিট করার ডায়ালগ
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("নিশ্চিত করুন", fontWeight = FontWeight.Bold) },
+            text = { Text("আপনি কি এই OLT ডিভাইসটি ডিলিট করতে চান?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleteTargetId?.let { viewModel.deleteOlt(it) }
+                    showDeleteDialog = false
+                }) { Text("হ্যাঁ", color = RedWiredCut) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("বাতিল") }
+            }
+        )
+    }
+}
+
+@Composable
+fun OltFormDialog(existingOlt: OltItem?, onDismiss: () -> Unit, onSave: (OltItem) -> Unit) {
+    var name by remember { mutableStateOf(existingOlt?.name ?: "") }
+    var ip by remember { mutableStateOf(existingOlt?.ip ?: "") }
+    var location by remember { mutableStateOf(existingOlt?.location ?: "") }
+    var snmpVersion by remember { mutableStateOf(existingOlt?.snmpVersion ?: "v2c") }
+    var community by remember { mutableStateOf(existingOlt?.community ?: "public") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (existingOlt == null) "নতুন OLT যোগ করুন" else "OLT এডিট করুন", fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("OLT নাম") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = ip, onValueChange = { ip = it }, label = { Text("Management IP") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = location, onValueChange = { location = it }, label = { Text("লোকেশন") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = snmpVersion, onValueChange = { snmpVersion = it }, label = { Text("SNMP Version") }, modifier = Modifier.fillMaxWidth())
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(value = community, onValueChange = { community = it }, label = { Text("SNMP Community") }, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val newOlt = OltItem(
+                    id = existingOlt?.id ?: System.currentTimeMillis(),
+                    name = name, ip = ip, location = location,
+                    user = "admin", snmpVersion = snmpVersion,
+                    community = community, status = "online"
+                )
+                onSave(newOlt)
+            }) { Text("সেভ করুন") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("বাতিল") }
+        }
+    )
+}
+```
+
+---
+
+অবশ্যই! আমি ৯ নম্বর ধাপ থেকে বাকি সবকিছু একে একে সম্পূর্ণ করে দিচ্ছি।
+
+এখানে MainActivity (নেভিগেশন) এবং বাকি UI থিম ফাইল দেওয়া হলো। এই ফাইলগুলো আপনার প্রজেক্টে বসালেই অ্যাপটি সম্পূর্ণভাবে রান করবে।
+
+---
+
+🚀 ধাপ ৯: MainActivity.kt (নেভিগেশন সহ)
+
+com.example.ispapp প্যাকেজের ভেতরে থাকা ডিফল্ট MainActivity.kt ফাইলটি মুছে দিয়ে নিচের কোডটি পেস্ট করুন। এখানে Bottom Navigation এবং স্ক্রিন পরিবর্তনের লজিক থাকবে।
+
+```kotlin
+package com.example.ispapp
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.*
+import com.example.ispapp.screens.*
+import com.example.ispapp.ui.theme.ISPAppTheme
+import com.example.ispapp.viewmodel.MainViewModel
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            ISPAppTheme {
+                MainApp()
+            }
+        }
+    }
+}
+
+@Composable
+fun MainApp() {
+    val navController = rememberNavController()
+    val viewModel: MainViewModel = viewModel()
+
+    // নেভিগেশন আইটেমের লিস্ট
+    val navItems = listOf(
+        BottomNavItem("pon", "পন পোর্ট", Icons.Default.Router),
+        BottomNavItem("dashboard", "হোম", Icons.Default.Home),
+        BottomNavItem("onu", "ONU", Icons.Default.DeviceHub),
+        BottomNavItem("olt", "OLT", Icons.Default.Dns),
+        BottomNavItem("more", "আরও", Icons.Default.AddCircle)
+    )
+
+    Scaffold(
+        bottomBar = {
+            NavigationBar(containerColor = androidx.compose.ui.graphics.Color.White) {
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentDestination = navBackStackEntry?.destination
+                
+                navItems.forEach { item ->
+                    val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+                    NavigationBarItem(
+                        icon = { Icon(item.icon, contentDescription = item.label) },
+                        label = { Text(item.label, fontSize = 10.sp) },
+                        selected = selected,
+                        onClick = {
+                            navController.navigate(item.route) {
+                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    ) { paddingValues ->
+        NavHost(
+            navController = navController,
+            startDestination = "pon",
+            modifier = Modifier.padding(paddingValues)
+        ) {
+            composable("pon") { PonScreen(viewModel) }
+            composable("dashboard") { DashboardScreen(viewModel) }
+            composable("onu") { OnuListScreen(viewModel) }
+            composable("olt") { OltListScreen(viewModel) }
+        }
+    }
+}
+
+data class BottomNavItem(val route: String, val label: String, val icon: ImageVector)
+```
+
+---
+
+🎨 ধাপ ১০: UI থিম (ui/theme/Theme.kt)
+
+ui/theme প্যাকেজের ভেতরে থাকা ডিফল্ট Theme.kt ফাইলটি খুলে নিচের কোডটি দিন (এটি আপনার কালার ফাইলকে অ্যাপে যুক্ত করবে):
+
+```kotlin
+package com.example.ispapp.ui.theme
+
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+
+private val DarkColorScheme = darkColorScheme(
+    primary = BluePrimary,
+    secondary = GreenOnline,
+    tertiary = YellowPowerOff
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = BluePrimary,
+    secondary = GreenOnline,
+    tertiary = YellowPowerOff
+)
+
+@Composable
+fun ISPAppTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit
+) {
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+
+    MaterialTheme(
+        colorScheme = colorScheme,
+        typography = Typography,
+        content = content
+    )
+}
+```
+
+---
+
+📝 ধাপ ১১: টাইপোগ্রাফি (ui/theme/Type.kt)
+
+কোটলিনে বাংলা ফন্ট সাপোর্ট ঠিক রাখার জন্য এই ফাইলটি প্রয়োজন। ui/theme ফোল্ডারের ভেতরে থাকা ডিফল্ট Type.kt ফাইলের কোডটি নিচের কোড দিয়ে রিপ্লেস করুন:
+
+```kotlin
+package com.example.ispapp.ui.theme
+
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+
+val Typography = Typography(
+    bodyLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.5.sp
+    ),
+    titleLarge = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.sp
+    ),
+    labelSmall = TextStyle(
+        fontFamily = FontFamily.Default,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.5.sp
+    )
+)
+```
+
+---
+
+🔍 ধাপ ১২: ONU সার্চে ড্রপডাউন/ফিল্টার ফিক্স
+
+আগের OnuListScreen.kt-এ যে FilterButton ফাংশনটি ব্যবহার করা হয়েছে, সেটি যাতে PonScreen.kt-এর সাথে কনফ্লিক্ট না করে, তাই এটি আলাদা করে রাখতে হবে।
+
+যদি আপনার অ্যাপটি রান করার সময় এরর দেয়, তবে নিশ্চিত করুন যে OnuListScreen.kt-এ FilterButton টি ডিক্লেয়ার করা আছে (আগের ধাপে দেওয়া আছে)।
+
+---
+
+⚙️ ধাপ ১৩: AndroidManifest.xml (পারমিশন)
+
+মনে রাখতে হবে, যেহেতু এটি একটি নেটওয়ার্ক ম্যানেজমেন্ট অ্যাপ, ভবিষ্যতে API থেকে ডেটা আনতে হলে ইন্টারনেট পারমিশন লাগবে।
+
+app/src/main/AndroidManifest.xml ফাইলে <manifest> ট্যাগের ঠিক নিচে এই লাইনটি যোগ করুন:
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+---
+
+🚀 অ্যাপটি রান করার নিয়ম
+
+১. Android Studio খুলুন এবং উপরের সব ধাপ অনুযায়ী ফাইলগুলো তৈরি করুন (বা রিপ্লেস করুন)।
+২. উপরে ডানদিকে "Sync Project with Gradle Files" আইকনে ক্লিক করুন।
+৩. একটি ইমুলেটর (Emulator) বা রিয়েল ফোন কানেক্ট করুন।
+৪. উপরে Run (▶️) বাটনে ক্লিক করুন।
+
+💡 এই অ্যাপে যা যা কাজ করবে:
+
+· পন পোর্ট স্ক্রিন: ফিল্টার বাটন (All, Optimal, Down) ক্লিক করলে ডেটা ফিল্টার হবে।
+· হোম (ড্যাশবোর্ড): প্রতি ৩ সেকেন্ডে CPU, RAM, তাপমাত্রার মান নিজে নিজে পরিবর্তন হবে (লাইভ সিমুলেশন)।
+· ONU লিস্ট: লাইভ সার্চ (SN বা নাম দিয়ে) এবং স্ট্যাটাস ফিল্টার কাজ করবে।
+· OLT ম্যানেজমেন্ট: + বাটনে ক্লিক করলে পপ-আপ আসবে, সেখানে OLT অ্যাড করতে পারবেন। এডিট ও ডিলিট বাটনও কাজ করবে।
+
+⚠️ একটি গুরুত্বপূর্ণ নোট:
+
+জেটপ্যাক কম্পোজে (Jetpack Compose) বাংলা ফন্ট রেন্ডারিং অনেক ক্ষেত্রে ডিভাইসের সিস্টেম ফন্টের উপর নির্ভর করে। যদি কোনো কারণে বাংলা লেখা ভেঙে যায় বা বক্স আসে, তবে res/font ফোল্ডারে একটি বাংলা ফন্ট (যেমন: HindSiliguri-Regular.ttf) যোগ করে Type.kt-এ সেটি সেট করতে হবে। তবে আধুনিক বেশিরভাগ অ্যান্ড্রয়েড ফোনে (API 26+) বাংলা ডিফল্টভাবেই সাপোর্ট করে।
+
+আপনার অ্যাপটি এখন সম্পূর্ণ প্রস্তুত! কোথাও কোনো এরর আসলে জানাবেন, আমি ঠিক করে দেব।

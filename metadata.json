@@ -1,0 +1,6 @@
+{
+  "name": "OLT Manager Pro",
+  "description": "OLT Management and Monitoring App via SNMP and Telnet/SSH",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
