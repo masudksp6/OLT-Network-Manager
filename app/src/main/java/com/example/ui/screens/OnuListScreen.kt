@@ -44,16 +44,12 @@ fun OnuListScreen(viewModel: MainViewModel) {
     val selectedOlt by viewModel.selectedOlt.collectAsState()
     val isRefreshingLive by viewModel.isRefreshingLive.collectAsState()
 
-    // OLT থেকে আসা আসল ফিজিক্যাল পোর্ট তালিকা (ডাইনামিক, কোনো হার্ডকোডেড ৩টি পোর্ট নয়)
+    // OLT থেকে আসা আসল ফিজিক্যাল পোর্ট তালিকা (সম্পূর্ণ ডাইনামিক)
     val availablePorts = remember(ponList) {
-        if (ponList.isNotEmpty()) {
-            ponList.map { it.id }
-        } else {
-            listOf("EPON0/1", "EPON0/2", "EPON0/3", "EPON0/4")
-        }
+        ponList.map { it.id }
     }
 
-    var selectedPort by remember { mutableStateOf(availablePorts.firstOrNull() ?: "EPON0/1") }
+    var selectedPort by remember { mutableStateOf(availablePorts.firstOrNull() ?: "") }
 
     // যখন OLT পরিবর্তন হয় তখন সিলেক্টেড পোর্ট আপডেট করা
     LaunchedEffect(availablePorts) {
@@ -111,15 +107,15 @@ fun OnuListScreen(viewModel: MainViewModel) {
         ) {
             Column {
                 Text(
-                    text = "ONU তালিকা: $selectedPort",
+                    text = if (selectedPort.isNotBlank()) "ONU তালিকা: $selectedPort" else "ONU তালিকা",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                val oltName = selectedOlt?.name ?: "BDCOM GP3600-08"
+                val oltName = selectedOlt?.name ?: "কোনো OLT সংযুক্ত নেই"
                 Text(
-                    text = "$oltName | মোট $totalCount গ্রাহক ডিভাইস",
+                    text = if (selectedOlt != null) "$oltName | মোট $totalCount গ্রাহক ডিভাইস" else "OLT ডিভাইস ট্যাব থেকে OLT নির্বাচন বা যুক্ত করুন",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -315,7 +311,13 @@ fun OnuListScreen(viewModel: MainViewModel) {
         Spacer(modifier = Modifier.height(14.dp))
 
         // --- গ্রাহক ONU তালিকা ---
-        if (filteredList.isEmpty()) {
+        if (selectedOlt == null || availablePorts.isEmpty()) {
+            GlobalEmptyState(
+                icon = Icons.Default.Person,
+                title = "কোনো OLT সংযুক্ত নেই",
+                subtitle = "OLT ডিভাইস মেনু থেকে একটি OLT যুক্ত বা নির্বাচন করুন"
+            )
+        } else if (filteredList.isEmpty()) {
             GlobalEmptyState(
                 icon = Icons.Default.Person,
                 title = "কোনো ONU পাওয়া যায়নি",

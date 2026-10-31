@@ -131,7 +131,8 @@ object DirectSnmpClient {
         ip: String,
         port: Int = 161,
         community: String = "public",
-        vendor: String = "vsol"
+        vendor: String = "vsol",
+        expectedPortCount: Int = 8
     ): RealOltFullSync? = withContext(Dispatchers.IO) {
         try {
             // ১. সিস্টেম ডেসক্রিপশন ও আপটাইম
@@ -155,8 +156,8 @@ object DirectSnmpClient {
             }
 
             // ৩. রিয়েল PON ইন্টারফেস ওয়াক (IF-MIB)
-            val realPons = fetchRealPonInterfaces(ip, port, community)
-            val discoveredPonIds = if (realPons.isNotEmpty()) realPons.map { it.id } else listOf("EPON0/1", "EPON0/2", "EPON0/3", "EPON0/4")
+            val realPons = fetchRealPonInterfaces(ip, port, community, expectedPortCount)
+            val discoveredPonIds = if (realPons.isNotEmpty()) realPons.map { it.id } else (1..expectedPortCount).map { "EPON0/$it" }
 
             // ৪. রিয়েল ONU তালিকা ওয়াক
             val realOnus = fetchRealOnus(ip, port, community, vendor, discoveredPonIds)
@@ -190,7 +191,8 @@ object DirectSnmpClient {
     suspend fun fetchRealPonInterfaces(
         ip: String,
         port: Int,
-        community: String
+        community: String,
+        defaultPortCount: Int = 8
     ): List<PonInterface> = withContext(Dispatchers.IO) {
         val list = mutableListOf<PonInterface>()
         try {
@@ -225,8 +227,7 @@ object DirectSnmpClient {
                     )
                 }
             } else {
-                // যদি ডাইনামিক ওয়াক না করে, তবে স্ট্যান্ডার্ড ৮টি পোর্ট
-                for (idx in 0 until 8) {
+                for (idx in 0 until defaultPortCount) {
                     list.add(
                         PonInterface(
                             id = "EPON0/${idx + 1}",
@@ -247,7 +248,7 @@ object DirectSnmpClient {
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed walking PON interfaces on $ip: ${e.message}")
-            for (idx in 0 until 8) {
+            for (idx in 0 until defaultPortCount) {
                 list.add(
                     PonInterface(
                         id = "EPON0/${idx + 1}",

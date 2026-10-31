@@ -10,7 +10,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Notifications
@@ -85,7 +87,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        PulsingDot()
+                        PulsingDot(isActive = selectedOlt != null && dashData.status == "online")
                         Text(
                             text = selectedOlt?.name ?: dashData.deviceName,
                             fontWeight = FontWeight.Bold,
@@ -103,7 +105,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                     val activeIp = selectedOlt?.ip ?: dashData.ip
                     val activePort = selectedOlt?.snmpPort ?: dashData.snmpPort
                     Text(
-                        text = "$activeIp • SNMP $activePort",
+                        text = if (selectedOlt != null) "$activeIp • SNMP $activePort" else "কোনো ডিভাইস নির্বাচন করা নেই",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -189,9 +191,10 @@ fun DashboardScreen(viewModel: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            val vendorName = selectedOlt?.vendor?.uppercase() ?: "BDCOM"
-                            val vendorBg = if (vendorName == "BDCOM") GreenBadgeBg else Color(0xFFFEE2E2)
-                            val vendorColor = if (vendorName == "BDCOM") GreenText else Color(0xFFDC2626)
+                            val isConnected = selectedOlt != null && dashData.status == "online"
+                            val vendorName = selectedOlt?.vendor?.uppercase() ?: "OLT"
+                            val vendorBg = if (isConnected) GreenBadgeBg else MaterialTheme.colorScheme.surfaceVariant
+                            val vendorColor = if (isConnected) GreenText else MaterialTheme.colorScheme.onSurfaceVariant
 
                             Box(
                                 modifier = Modifier
@@ -217,7 +220,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                                 )
                                 Spacer(modifier = Modifier.height(3.dp))
                                 Text(
-                                    text = "আপটাইম: $uptime",
+                                    text = if (isConnected) "আপটাইম: $uptime" else "স্ট্যাটাস: অসংযুক্ত (Offline)",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -225,27 +228,89 @@ fun DashboardScreen(viewModel: MainViewModel) {
                         }
 
                         // স্ট্যাটাস
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = GreenBadgeBg
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        if (selectedOlt != null && dashData.status == "online") {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = GreenBadgeBg
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(6.dp)
-                                        .clip(CircleShape)
-                                        .background(GreenOnline)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(GreenOnline)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "অনলাইন",
+                                        color = GreenText,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
                                 Text(
-                                    text = "অনলাইন",
-                                    color = GreenText,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    text = "অসংযুক্ত",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // যদি কোনো OLT সক্রিয় না থাকে, তবে একটি অ্যাকশন কার্ড প্রদর্শন করা
+                if (selectedOlt == null) {
+                    GlobalCard(
+                        cornerRadius = 16.dp,
+                        elevation = 1.dp,
+                        border = BorderStroke(1.dp, BluePrimary.copy(alpha = 0.3f)),
+                        testTag = "no_olt_action_card"
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Dns,
+                                contentDescription = null,
+                                tint = BluePrimary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "কোনো OLT সক্রিয় নেই",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "টেলিমোট্রি ও গ্রাহক ডেটা দেখতে একটি OLT যুক্ত করুন বা নির্বাচন করুন",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = { showOltPicker = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = BluePrimary),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("OLT নির্বাচন বা যুক্ত করুন", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -274,9 +339,10 @@ fun DashboardScreen(viewModel: MainViewModel) {
                                 fontSize = 15.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                            val isConnected = selectedOlt != null && dashData.status == "online"
                             Surface(
                                 shape = RoundedCornerShape(50),
-                                color = GreenBadgeBg
+                                color = if (isConnected) GreenBadgeBg else MaterialTheme.colorScheme.surfaceVariant
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -286,12 +352,12 @@ fun DashboardScreen(viewModel: MainViewModel) {
                                         modifier = Modifier
                                             .size(5.dp)
                                             .clip(CircleShape)
-                                            .background(GreenOnline)
+                                            .background(if (isConnected) GreenOnline else MaterialTheme.colorScheme.onSurfaceVariant)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
                                     Text(
-                                        text = "স্বাভাবিক",
-                                        color = GreenText,
+                                        text = if (isConnected) "স্বাভাবিক" else "অফলাইন",
+                                        color = if (isConnected) GreenText else MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -309,7 +375,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                             GlobalArcGauge(
                                 value = "$cpu%",
                                 label = "CPU ব্যবহার",
-                                subLabel = "Optimal",
+                                subLabel = if (cpu > 0) "Optimal" else "0.0%",
                                 progress = cpu / 100f,
                                 arcColor = BluePrimary,
                                 subLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -325,7 +391,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
                             GlobalArcGauge(
                                 value = "$temp°C",
                                 label = "তাপমাত্রা",
-                                subLabel = if (temp > 50) "উষ্ণ" else "স্বাভাবিক",
+                                subLabel = if (temp > 50) "উষ্ণ" else if (temp > 0) "স্বাভাবিক" else "0°C",
                                 progress = temp / 100f,
                                 arcColor = OrangeGauge,
                                 subLabelColor = OrangeGauge
@@ -517,15 +583,15 @@ fun DashboardScreen(viewModel: MainViewModel) {
                                         text = "${dashData.activePonCount}",
                                         fontSize = 32.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = GreenText
+                                        color = if (dashData.activePonCount > 0) GreenText else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Surface(
                                         shape = RoundedCornerShape(50),
-                                        color = GreenBadgeBg
+                                        color = if (dashData.activePonCount > 0) GreenBadgeBg else MaterialTheme.colorScheme.surfaceVariant
                                     ) {
                                         Text(
                                             text = dashData.ponStatusText,
-                                            color = GreenText,
+                                            color = if (dashData.activePonCount > 0) GreenText else MaterialTheme.colorScheme.onSurfaceVariant,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -574,67 +640,75 @@ fun DashboardScreen(viewModel: MainViewModel) {
                 onDismissRequest = { showOltPicker = false }
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "পোর্ট পর্যবেক্ষণ ও টেলিমেট্রির জন্য OLT নির্বাচন করুন:",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    oltList.forEach { olt ->
-                        val isSel = selectedOlt?.id == olt.id
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSel) BluePrimary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.5.dp, if (isSel) BluePrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    viewModel.selectOlt(olt)
-                                    showOltPicker = false
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                    if (oltList.isEmpty()) {
+                        Text(
+                            text = "কোনো OLT তালিকাভুক্ত নেই। 'OLT ডিভাইস' মেনু থেকে আপনার OLT যুক্ত করুন।",
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text(
+                            text = "পোর্ট পর্যবেক্ষণ ও টেলিমেট্রির জন্য OLT নির্বাচন করুন:",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        oltList.forEach { olt ->
+                            val isSel = selectedOlt?.id == olt.id
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isSel) BluePrimary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.5.dp, if (isSel) BluePrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        viewModel.selectOlt(olt)
+                                        showOltPicker = false
+                                    }
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = olt.name,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Surface(
-                                            shape = RoundedCornerShape(4.dp),
-                                            color = BluePrimary.copy(alpha = 0.12f)
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
-                                                text = "${olt.totalPonPorts} PORTS",
-                                                color = BluePrimary,
-                                                fontSize = 9.sp,
+                                                text = olt.name,
                                                 fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                fontSize = 14.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
                                             )
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = BluePrimary.copy(alpha = 0.12f)
+                                            ) {
+                                                Text(
+                                                    text = "${olt.totalPonPorts} PORTS",
+                                                    color = BluePrimary,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                )
+                                            }
                                         }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "${olt.ip}:${olt.snmpPort} • ${olt.location}",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "${olt.ip}:${olt.snmpPort} • ${olt.location}",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                if (isSel) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = "Selected",
-                                        tint = BluePrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                    if (isSel) {
+                                        Icon(
+                                            imageVector = Icons.Default.CheckCircle,
+                                            contentDescription = "Selected",
+                                            tint = BluePrimary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -646,7 +720,7 @@ fun DashboardScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun PulsingDot() {
+fun PulsingDot(isActive: Boolean = true) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
@@ -661,8 +735,8 @@ fun PulsingDot() {
     Box(
         modifier = Modifier
             .size(10.dp)
-            .graphicsLayer { this.alpha = alpha }
+            .graphicsLayer { this.alpha = if (isActive) alpha else 1f }
             .clip(CircleShape)
-            .background(GreenOnline)
+            .background(if (isActive) GreenOnline else Color(0xFF94A3B8))
     )
 }
