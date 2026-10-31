@@ -141,28 +141,6 @@ fun DashboardScreen(viewModel: MainViewModel) {
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.width(10.dp))
-
-                    // ইউজার প্রোফাইল অ্যাভাটার
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(BluePrimary, PurpleAccent)
-                                )
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = "Profile",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
                 }
             }
 
