@@ -60,58 +60,45 @@ fun OltListScreen(viewModel: MainViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag("olt_list_screen")
     ) {
-        // --- হেডার ---
-        Row(
+        // --- গ্লোবাল অ্যাপ হেডার ---
+        GlobalAppHeader(
+            title = "OLT ডিভাইস তালিকা",
+            subtitle = "সংরক্ষিত ডিভাইস: ${oltList.size} টি (BDCOM, V-SOL)",
+            showActiveIndicator = selectedOlt != null,
+            isActive = selectedOlt != null,
+            actions = {
+                // নতুন OLT যুক্ত করার বাটন
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(BluePrimary)
+                        .clickable {
+                            editingOlt = null
+                            showAddEditDialog = true
+                        }
+                        .testTag("add_olt_fab"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Add OLT",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            },
+            testTag = "olt_app_header"
+        )
+
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Column {
-                Text(
-                    text = "OLT ডিভাইস তালিকা",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 22.sp,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "মোট ডিভাইস: ${oltList.size} টি (BDCOM, V-SOL)",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // নতুন OLT যুক্ত করার বাটন
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(BluePrimary)
-                    .clickable {
-                        editingOlt = null
-                        showAddEditDialog = true
-                    }
-                    .testTag("add_olt_fab"),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add OLT",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // --- সার্চ বার ---
+            // --- সার্চ বার ---
         GlobalSearchBar(
             query = searchQuery,
             onQueryChange = { searchQuery = it },
@@ -158,6 +145,7 @@ fun OltListScreen(viewModel: MainViewModel) {
             }
         }
     }
+}
 
     // --- OLT যুক্ত বা এডিট করার ডায়ালগ ---
     if (showAddEditDialog) {

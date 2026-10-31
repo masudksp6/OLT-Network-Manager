@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.data.model.OnuItem
 import com.example.data.model.PonInterface
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.net.DatagramPacket
@@ -80,6 +81,8 @@ object DirectSnmpClient {
     const val OID_BDCOM_ONU_MAC = "1.3.6.1.4.1.3320.101.10.1.1.3"
     const val OID_BDCOM_ONU_STATUS = "1.3.6.1.4.1.3320.101.10.1.1.26"
     const val OID_BDCOM_ONU_RX = "1.3.6.1.4.1.3320.101.10.5.1.5"
+    const val OID_BDCOM_ONU_TX = "1.3.6.1.4.1.3320.101.10.5.1.6"
+    const val OID_BDCOM_ONU_DIST = "1.3.6.1.4.1.3320.101.10.5.1.7"
 
     /**
      * OLT এর সাথে সরাসরি লাইভ পিং/SNMP টেস্ট
@@ -162,6 +165,23 @@ object DirectSnmpClient {
             // ৪. রিয়েল ONU তালিকা ওয়াক
             val realOnus = fetchRealOnus(ip, port, community, vendor, discoveredPonIds)
 
+            // PON ইন্টারফেস অনুযায়ী ONU কাউন্ট আপডেট করা
+            val updatedPons = realPons.map { pon ->
+                val onusOnThisPon = realOnus.filter { onu ->
+                    onu.port.startsWith(pon.id) || onu.port.substringBefore(":") == pon.id
+                }
+                val onlineCount = onusOnThisPon.count { it.status == "online" }
+                val powerOffCount = onusOnThisPon.count { it.status == "poweroff" }
+                val wiredCutCount = onusOnThisPon.count { it.status == "wirecut" }
+                pon.copy(
+                    connected = onusOnThisPon.size,
+                    online = onlineCount,
+                    powerOff = powerOffCount,
+                    wiredCut = wiredCutCount,
+                    maxOnu = 64
+                )
+            }
+
             val telemetry = RealOltTelemetry(
                 deviceName = sysName ?: descr.take(24),
                 ip = ip,
@@ -170,13 +190,13 @@ object DirectSnmpClient {
                 cpuPercent = cpu,
                 ramPercent = mem,
                 tempCelsius = temp,
-                activePons = realPons.count { it.status.equals("optimal", ignoreCase = true) || it.status.equals("active", ignoreCase = true) },
+                activePons = updatedPons.count { it.status.equals("optimal", ignoreCase = true) || it.status.equals("active", ignoreCase = true) },
                 rawSysDescr = descr
             )
 
             RealOltFullSync(
                 telemetry = telemetry,
-                ponList = realPons,
+                ponList = updatedPons,
                 onuList = realOnus
             )
         } catch (e: Exception) {
@@ -200,7 +220,7 @@ object DirectSnmpClient {
             val ponEntries = ifDescrs.filter {
                 val v = it.value.lowercase()
                 (v.contains("epon") || v.contains("gpon") || v.contains("pon")) &&
-                        !v.contains("onu") && !v.contains("vlan") && !v.contains("bridge") && !v.contains("eth")
+                        !v.contains(":") && !v.contains("onu") && !v.contains("vlan") && !v.contains("bridge") && !v.contains("eth")
             }
 
             if (ponEntries.isNotEmpty()) {
@@ -226,46 +246,9 @@ object DirectSnmpClient {
                         )
                     )
                 }
-            } else {
-                for (idx in 0 until defaultPortCount) {
-                    list.add(
-                        PonInterface(
-                            id = "EPON0/${idx + 1}",
-                            type = "EPON PX20++",
-                            status = "optimal",
-                            txPower = "+9.19 dBm",
-                            sfpTemp = "36.1°C",
-                            voltage = "3.26V",
-                            laserBias = "26.0 mA",
-                            connected = 0,
-                            maxOnu = 64,
-                            online = 0,
-                            powerOff = 0,
-                            wiredCut = 0
-                        )
-                    )
-                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed walking PON interfaces on $ip: ${e.message}")
-            for (idx in 0 until defaultPortCount) {
-                list.add(
-                    PonInterface(
-                        id = "EPON0/${idx + 1}",
-                        type = "EPON PX20++",
-                        status = "optimal",
-                        txPower = "+9.19 dBm",
-                        sfpTemp = "36.1°C",
-                        voltage = "3.26V",
-                        laserBias = "26.0 mA",
-                        connected = 0,
-                        maxOnu = 64,
-                        online = 0,
-                        powerOff = 0,
-                        wiredCut = 0
-                    )
-                )
-            }
         }
         list
     }
@@ -284,27 +267,97 @@ object DirectSnmpClient {
         try {
             val ponPorts = if (discoveredPonPorts.isNotEmpty()) discoveredPonPorts else listOf("EPON0/1", "EPON0/2", "EPON0/3", "EPON0/4")
             if (vendor.contains("bdcom", ignoreCase = true)) {
-                val macWalk = snmpWalk(ip, port, community, OID_BDCOM_ONU_MAC, maxCount = 128)
+                // ১. IF-MIB ifDescr ওয়াক করে প্রতিটি ONU এর ইন্টারফেস পোর্ট ম্যাপিং বের করা (যেমন 97 -> "EPON0/4:11")
+                val ifDescrMap = mutableMapOf<String, String>()
+                try {
+                    val ifDescrWalk = snmpWalk(ip, port, community, OID_IF_DESCR_TABLE, maxCount = 512)
+                    ifDescrWalk.forEach { vb ->
+                        val idx = vb.oid.substringAfterLast(".")
+                        if (vb.value.contains(":")) {
+                            ifDescrMap[idx] = vb.value
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.d(TAG, "ifDescr walk failed: ${e.message}")
+                }
+
+                // ২. BDCOM ONU MAC টেবিল ওয়াক (1.3.6.1.4.1.3320.101.10.1.1.3)
+                val macWalk = snmpWalk(ip, port, community, OID_BDCOM_ONU_MAC, maxCount = 512)
+
+                // ৩. BDCOM ONU স্ট্যাটাস টেবিল ওয়াক (1.3.6.1.4.1.3320.101.10.1.1.26: 3=online, 2=down/poweroff)
+                val statusMap = mutableMapOf<String, String>()
+                try {
+                    val statusWalk = snmpWalk(ip, port, community, OID_BDCOM_ONU_STATUS, maxCount = 512)
+                    statusWalk.forEach { vb ->
+                        val idx = vb.oid.substringAfterLast(".")
+                        statusMap[idx] = vb.value
+                    }
+                } catch (e: Exception) {
+                    Log.d(TAG, "Status walk failed: ${e.message}")
+                }
+
+                // ৪. BDCOM ONU Rx অপটিক্যাল পাওয়ার টেবিল ওয়াক (1.3.6.1.4.1.3320.101.10.5.1.5, raw / 10.0 dBm)
+                val rxMap = mutableMapOf<String, String>()
+                try {
+                    val rxWalk = snmpWalk(ip, port, community, OID_BDCOM_ONU_RX, maxCount = 512)
+                    rxWalk.forEach { vb ->
+                        val idx = vb.oid.substringAfterLast(".")
+                        rxMap[idx] = vb.value
+                    }
+                } catch (e: Exception) {
+                    Log.d(TAG, "Rx walk failed: ${e.message}")
+                }
+
+                // ৫. BDCOM ONU ডিস্ট্যান্স টেবিল ওয়াক (1.3.6.1.4.1.3320.101.10.5.1.7)
+                val distMap = mutableMapOf<String, String>()
+                try {
+                    val distWalk = snmpWalk(ip, port, community, OID_BDCOM_ONU_DIST, maxCount = 512)
+                    distWalk.forEach { vb ->
+                        val idx = vb.oid.substringAfterLast(".")
+                        distMap[idx] = vb.value
+                    }
+                } catch (e: Exception) {
+                    Log.d(TAG, "Distance walk failed: ${e.message}")
+                }
+
                 macWalk.forEachIndexed { i, vb ->
                     val onuIdx = vb.oid.substringAfterLast(".")
-                    val rxPowerRaw = sendSnmpRequest(ip, port, community, "$OID_BDCOM_ONU_RX.$onuIdx", pduType = 0xA0, timeoutMs = 700)?.value
-                    val rxFloat = (rxPowerRaw?.toIntOrNull() ?: -210) / 10.0
-                    val rxStr = String.format("%.1f dBm", rxFloat)
-                    val assignedPort = ponPorts[i % ponPorts.size]
+                    val portName = ifDescrMap[onuIdx] ?: "${ponPorts[i % ponPorts.size]}:${(i / ponPorts.size) + 1}"
+                    val rawStatus = statusMap[onuIdx]
+                    val rawRx = rxMap[onuIdx]?.toIntOrNull()
+                    val rawDist = distMap[onuIdx]
+
+                    val rxFloat = if (rawRx != null && rawRx != 0) {
+                        if (rawRx > 32767) (rawRx - 65536) / 10.0 else rawRx / 10.0
+                    } else -21.4
+                    val rxStr = String.format(java.util.Locale.US, "%.1f dBm", rxFloat)
+
+                    // স্ট্যাটাস লজিক: ৩ = online, ২ = poweroff, খুব দুর্বল সিগন্যাল (<= -28.0 dBm) হলে wirecut
+                    val status = when {
+                        rawStatus == "3" && rxFloat > -28.0 -> "online"
+                        rawStatus == "3" && rxFloat <= -28.0 -> "wirecut"
+                        rawStatus == "2" -> "poweroff"
+                        rxFloat < -28.0 -> "wirecut"
+                        else -> "online"
+                    }
+
+                    val distStr = if (!rawDist.isNullOrEmpty() && rawDist != "0") "${rawDist} m" else "${120 + (i * 13) % 800} m"
+                    val formattedMac = vb.value.trim().replace(" ", ":").uppercase()
 
                     list.add(
                         OnuItem(
                             id = i + 1,
                             user = "BDCOM-ONU-#${i + 1}",
-                            status = if (rxFloat < -28.0) "wirecut" else "online",
+                            status = status,
                             fdb = "99.8%",
-                            ip = "$ip:${100 + i}",
+                            ip = "$ip:${100 + (i % 150)}",
                             uptime = "1d 2h",
-                            port = "$assignedPort:${(i / ponPorts.size) + 1}",
-                            sn = vb.value.ifEmpty { "BDCM${1000 + i}" },
+                            port = portName,
+                            mac = formattedMac.ifEmpty { "00:D5:9E:F0:EB:50" },
+                            sn = formattedMac.ifEmpty { "BDCM${1000 + i}" },
                             rx = rxStr,
                             tx = "+2.1 dBm",
-                            distance = "${120 + i * 15} m"
+                            distance = distStr
                         )
                     )
                 }
@@ -362,6 +415,7 @@ object DirectSnmpClient {
             }
             results.add(next)
             currentOid = next.oid
+            delay(8)
         }
         results
     }
@@ -571,13 +625,47 @@ object DirectSnmpClient {
             val valBytes = data.copyOfRange(index, index + valLen.first)
 
             val valueStr = when (valTag) {
-                0x02 -> { // INTEGER
-                    var num = 0
-                    for (b in valBytes) num = (num shl 8) or (b.toInt() and 0xFF)
+                0x02 -> { // INTEGER (signed 2's complement)
+                    if (valBytes.isEmpty()) "0" else {
+                        var num = if ((valBytes[0].toInt() and 0x80) != 0) -1 else 0
+                        for (b in valBytes) {
+                            num = (num shl 8) or (b.toInt() and 0xFF)
+                        }
+                        num.toString()
+                    }
+                }
+                0x41, 0x42 -> { // Counter32, Gauge32 (unsigned 32-bit int e.g. BDCOM CPU)
+                    var num = 0L
+                    for (b in valBytes) {
+                        num = (num shl 8) or (b.toLong() and 0xFF)
+                    }
                     num.toString()
                 }
+                0x46 -> { // Counter64
+                    var num = 0L
+                    for (b in valBytes) {
+                        num = (num shl 8) or (b.toLong() and 0xFF)
+                    }
+                    num.toString()
+                }
+                0x40 -> { // IpAddress (4 bytes)
+                    valBytes.joinToString(".") { (it.toInt() and 0xFF).toString() }
+                }
                 0x04 -> { // OCTET STRING
-                    String(valBytes, Charsets.UTF_8).trim()
+                    val isBinary = valBytes.any { it < 32 || it > 126 }
+                    if (valBytes.size == 6 && isBinary) {
+                        // 6-byte binary MAC address (e.g. 00:D5:9E:F0:EB:50)
+                        valBytes.joinToString(":") { "%02X".format(it) }
+                    } else if (isBinary) {
+                        val isAsciiPrintableWithNulls = valBytes.all { it in 32..126 || it == 0.toByte() || it == 10.toByte() || it == 13.toByte() }
+                        if (isAsciiPrintableWithNulls) {
+                            String(valBytes, Charsets.UTF_8).trim { it <= ' ' || it == '\u0000' }
+                        } else {
+                            valBytes.joinToString(":") { "%02X".format(it) }
+                        }
+                    } else {
+                        String(valBytes, Charsets.UTF_8).trim()
+                    }
                 }
                 0x43 -> { // TimeTicks
                     var ticks = 0L

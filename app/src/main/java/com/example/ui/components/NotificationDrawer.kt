@@ -41,6 +41,7 @@ fun NotificationDrawer(
     notifications: List<NotificationItem>,
     onClose: () -> Unit,
     onMarkAllAsRead: () -> Unit,
+    onDismissNotification: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (!isOpen) return
@@ -154,7 +155,10 @@ fun NotificationDrawer(
                             }
                         } else {
                             items(notifications, key = { it.id }) { item ->
-                                NotificationCard(item = item)
+                                NotificationCard(
+                                    item = item,
+                                    onDismiss = { onDismissNotification(item.id) }
+                                )
                             }
                         }
                     }
@@ -191,7 +195,10 @@ fun NotificationDrawer(
 }
 
 @Composable
-private fun NotificationCard(item: NotificationItem) {
+private fun NotificationCard(
+    item: NotificationItem,
+    onDismiss: () -> Unit
+) {
     val isError = item.type.equals("error", ignoreCase = true)
 
     val bgColor = if (isError) Color(0xFFFEF2F2) else Color(0xFFEFF6FF)
@@ -223,19 +230,37 @@ private fun NotificationCard(item: NotificationItem) {
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = Color(0xFF0F172A)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = item.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = Color(0xFF0F172A),
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(20.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Dismiss",
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
                     text = item.message,
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
                     color = Color(0xFF475569)
                 )
 
@@ -243,7 +268,7 @@ private fun NotificationCard(item: NotificationItem) {
 
                 Text(
                     text = item.timeAgo,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     color = Color(0xFF94A3B8)
                 )
             }

@@ -18,43 +18,39 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.components.GlobalCard
+import com.example.ui.components.*
 import com.example.ui.theme.BluePrimary
 import com.example.viewmodel.MainViewModel
 
 @Composable
 fun SettingsScreen(viewModel: MainViewModel) {
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
-    var snmpTimeout by remember { mutableStateOf("3000 ms") }
-    var snmpRetry by remember { mutableStateOf("3 বার") }
-    var autoRefresh by remember { mutableStateOf(true) }
+    val autoRefresh by viewModel.autoRefreshEnabled.collectAsState()
+    val snmpTimeoutMs by viewModel.snmpTimeoutMs.collectAsState()
+    val snmpRetries by viewModel.snmpRetries.collectAsState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp)
             .testTag("settings_screen")
     ) {
-        // --- হেডার ---
-        Text(
-            text = "সেটিংস ও কনফিগারেশন",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = MaterialTheme.colorScheme.onBackground
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = "অ্যাপ থিম এবং SNMP ট্র্যাকিং প্যারামিটারসমূহ পরিচালনা করুন",
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        // --- গ্লোবাল অ্যাপ হেডার ---
+        GlobalAppHeader(
+            title = "সেটিংস ও কনফিগারেশন",
+            subtitle = "অ্যাপ থিম এবং SNMP ট্র্যাকিং প্যারামিটারসমূহ",
+            testTag = "settings_app_header"
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // --- থিম সেটিংস ---
-        GlobalCard(testTag = "theme_settings_card") {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            // --- থিম সেটিংস ---
+            GlobalCard(testTag = "theme_settings_card") {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     text = "অ্যাপ্লিকেশন থিম",
@@ -142,7 +138,8 @@ fun SettingsScreen(viewModel: MainViewModel) {
                     }
                     Switch(
                         checked = autoRefresh,
-                        onCheckedChange = { autoRefresh = it }
+                        onCheckedChange = { viewModel.setAutoRefresh(it) },
+                        modifier = Modifier.testTag("auto_refresh_switch")
                     )
                 }
 
@@ -154,7 +151,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 SettingRowItem(
                     icon = Icons.Default.Timer,
                     title = "SNMP টাইমআউট",
-                    value = snmpTimeout
+                    value = "$snmpTimeoutMs ms"
                 )
 
                 HorizontalDivider(
@@ -165,7 +162,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 SettingRowItem(
                     icon = Icons.Default.Refresh,
                     title = "রিট্রাই সংখ্যা",
-                    value = snmpRetry
+                    value = "$snmpRetries বার"
                 )
             }
         }
@@ -217,6 +214,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
 
         Spacer(modifier = Modifier.height(80.dp))
     }
+}
 }
 
 @Composable

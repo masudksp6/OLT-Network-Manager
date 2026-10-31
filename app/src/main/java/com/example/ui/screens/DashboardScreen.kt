@@ -64,100 +64,66 @@ fun DashboardScreen(viewModel: MainViewModel) {
             .testTag("dashboard_screen")
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(bottom = 110.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
-            // --- হেডার ---
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier
-                        .clickable { showOltPicker = true }
-                        .padding(vertical = 2.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        PulsingDot(isActive = selectedOlt != null && dashData.status == "online")
-                        Text(
-                            text = selectedOlt?.name ?: dashData.deviceName,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Select OLT",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    val activeIp = selectedOlt?.ip ?: dashData.ip
-                    val activePort = selectedOlt?.snmpPort ?: dashData.snmpPort
-                    Text(
-                        text = if (selectedOlt != null) "$activeIp • SNMP $activePort" else "কোনো ডিভাইস নির্বাচন করা নেই",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // নোটিফিকেশন বেল
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(BluePrimary.copy(alpha = 0.12f))
-                            .clickable { showNotificationDrawer = true }
-                            .testTag("notification_bell_btn"),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = "Notifications",
-                            tint = BluePrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        val hasUnread = notifications.any { !it.isRead }
-                        if (hasUnread) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(top = 8.dp, end = 9.dp)
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(RedWiredCut)
-                            )
-                        }
-                    }
-                }
+            // --- গ্লোবাল অ্যাপ হেডার ---
+            val headerTitle = selectedOlt?.name ?: "OLT Manager"
+            val activeIp = selectedOlt?.ip ?: dashData.ip
+            val activePort = selectedOlt?.snmpPort ?: dashData.snmpPort
+            val activeVendor = selectedOlt?.vendor?.uppercase() ?: ""
+            val headerSubtitle = if (selectedOlt != null) {
+                if (activeVendor.isNotEmpty()) "$activeIp • SNMP $activePort • $activeVendor" else "$activeIp • SNMP $activePort"
+            } else {
+                "কোনো ডিভাইস নির্বাচন করা নেই (ট্যাপ করুন)"
             }
 
-            // --- কন্টেন্ট সেকশন ---
+            GlobalAppHeader(
+                title = headerTitle,
+                subtitle = headerSubtitle,
+                showActiveIndicator = true,
+                isActive = selectedOlt != null && dashData.status == "online",
+                onTitleClick = { showOltPicker = true },
+                actions = {
+                    val unreadCount = notifications.count { !it.isRead }
+                    GlobalNotificationBell(
+                        unreadCount = unreadCount,
+                        onClick = { showNotificationDrawer = true },
+                        testTag = "dashboard_notification_bell"
+                    )
+                },
+                testTag = "dashboard_app_header"
+            )
+
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(bottom = 110.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // ১. ডিভাইস পরিচিতি কার্ড
-                GlobalCard(
-                    cornerRadius = 18.dp,
-                    elevation = 1.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
-                    testTag = "device_info_card"
+                Spacer(modifier = Modifier.height(2.dp))
+                // --- কন্টেন্ট সেকশন ---
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    if (selectedOlt == null || oltList.isEmpty()) {
+                        GlobalEmptyState(
+                            icon = Icons.Default.Dns,
+                            title = "কোনো OLT ডিভাইস যুক্ত নেই",
+                            subtitle = "রিয়েল-টাইম ট্র্যাকিং এবং লাইভ SNMP ডেটা দেখার জন্য 'OLT ডিভাইস' ট্যাব থেকে আপনার OLT যোগ করুন।",
+                            modifier = Modifier.padding(top = 40.dp)
+                        )
+                    } else {
+                        // ১. ডিভাইস পরিচিতি কার্ড
+                        GlobalCard(
+                            cornerRadius = 18.dp,
+                            elevation = 1.dp,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                            testTag = "device_info_card"
+                        ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -596,7 +562,9 @@ fun DashboardScreen(viewModel: MainViewModel) {
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
             }
         }
 
@@ -605,7 +573,8 @@ fun DashboardScreen(viewModel: MainViewModel) {
             isOpen = showNotificationDrawer,
             notifications = notifications,
             onClose = { showNotificationDrawer = false },
-            onMarkAllAsRead = { viewModel.markAllNotificationsAsRead() }
+            onMarkAllAsRead = { viewModel.markAllNotificationsAsRead() },
+            onDismissNotification = { viewModel.dismissNotification(it) }
         )
 
         // OLT সিলেক্টর ডায়ালগ
@@ -695,26 +664,4 @@ fun DashboardScreen(viewModel: MainViewModel) {
             }
         }
     }
-}
-
-@Composable
-fun PulsingDot(isActive: Boolean = true) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "alpha"
-    )
-
-    Box(
-        modifier = Modifier
-            .size(10.dp)
-            .graphicsLayer { this.alpha = if (isActive) alpha else 1f }
-            .clip(CircleShape)
-            .background(if (isActive) GreenOnline else Color(0xFF94A3B8))
-    )
 }

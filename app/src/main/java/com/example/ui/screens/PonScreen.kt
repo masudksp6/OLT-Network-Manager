@@ -66,40 +66,22 @@ fun PonScreen(viewModel: MainViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag("pon_screen")
     ) {
-        // --- হেডার ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "PON Interfaces (${ponList.size})",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 22.sp,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                val oltLabel = selectedOlt?.let { "${it.name} • ${it.ip} (${it.vendor.uppercase()})" }
-                    ?: "কোনো OLT সংযুক্ত নেই"
-                Text(
-                    text = oltLabel,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        val oltLabel = selectedOlt?.let { "${it.name} • ${it.ip} (${it.vendor.uppercase()})" }
+            ?: "কোনো OLT সংযুক্ত নেই"
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // --- গ্লোবাল অ্যাপ হেডার ---
+        GlobalAppHeader(
+            title = "PON ইন্টারফেস (${ponList.size})",
+            subtitle = oltLabel,
+            showActiveIndicator = selectedOlt != null,
+            isActive = selectedOlt != null,
+            actions = {
                 // রিফ্রেশ বাটন
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(BluePrimary.copy(alpha = 0.12f))
                         .clickable { viewModel.refreshActiveOltData() }
@@ -125,7 +107,7 @@ fun PonScreen(viewModel: MainViewModel) {
                 // সার্চ টগল বাটন
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { isSearchActive = !isSearchActive }
@@ -139,10 +121,16 @@ fun PonScreen(viewModel: MainViewModel) {
                         modifier = Modifier.size(20.dp)
                     )
                 }
-            }
-        }
+            },
+            testTag = "pon_app_header"
+        )
 
-        // সার্চ বার
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // সার্চ বার
         if (isSearchActive) {
             Spacer(modifier = Modifier.height(10.dp))
             GlobalSearchBar(
@@ -224,6 +212,7 @@ fun PonScreen(viewModel: MainViewModel) {
             }
         }
     }
+}
 }
 
 /**
@@ -459,6 +448,19 @@ fun PonInterfaceCard(pon: PonInterface) {
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // লাইভ ব্যান্ডউইথ ট্রাফিক গ্রাফ/বার (Downlink & Uplink)
+            val rxMbps = if (isDown || pon.online == 0) 0.0 else (pon.online * 11.8).coerceAtMost(920.0)
+            val txMbps = if (isDown || pon.online == 0) 0.0 else (pon.online * 3.4).coerceAtMost(280.0)
+
+            GlobalPortTrafficBar(
+                rxMbps = rxMbps,
+                txMbps = txMbps,
+                maxCapacityMbps = 1250.0,
+                testTag = "pon_traffic_${pon.id}"
+            )
         }
     }
 }

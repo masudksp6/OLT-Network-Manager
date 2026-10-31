@@ -3,6 +3,7 @@ package com.example.ui.screens
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -62,9 +65,16 @@ fun OnuListScreen(viewModel: MainViewModel) {
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
 
-    // নির্বাচিত পোর্টের আন্ডারে থাকা গ্রাহক ডিভাইসসমূহ
+    // ডায়ালগ স্টেট
+    var showExportDialog by remember { mutableStateOf(false) }
+    var diagnosticOnu by remember { mutableStateOf<OnuItem?>(null) }
+    var isCheckingDiagnostic by remember { mutableStateOf(false) }
+
+    // নির্বাচিত পোর্টের আন্ডারে থাকা গ্রাহক ডিভাইসসমূহ (সঠিক পোর্ট আইসোলেশন)
     val portOnus = remember(onuList, selectedPort) {
-        onuList.filter { it.port.startsWith(selectedPort) }
+        onuList.filter {
+            it.port == selectedPort || it.port.startsWith("$selectedPort:") || it.port.substringBefore(":") == selectedPort
+        }
     }
 
     val totalCount = portOnus.size
@@ -94,39 +104,44 @@ fun OnuListScreen(viewModel: MainViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
             .testTag("onu_list_screen")
     ) {
-        // --- হেডার ---
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = if (selectedPort.isNotBlank()) "ONU তালিকা: $selectedPort" else "ONU তালিকা",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 22.sp,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                val oltName = selectedOlt?.name ?: "কোনো OLT সংযুক্ত নেই"
-                Text(
-                    text = if (selectedOlt != null) "$oltName | মোট $totalCount গ্রাহক ডিভাইস" else "OLT ডিভাইস ট্যাব থেকে OLT নির্বাচন বা যুক্ত করুন",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        val oltName = selectedOlt?.name ?: "কোনো OLT সংযুক্ত নেই"
+        val subtitleText = if (selectedOlt != null) {
+            "$oltName • পোর্ট: $selectedPort ($totalCount টি ONU)"
+        } else {
+            "OLT ডিভাইস ট্যাব থেকে OLT নির্বাচন বা যুক্ত করুন"
+        }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // --- গ্লোবাল অ্যাপ হেডার ---
+        GlobalAppHeader(
+            title = if (selectedPort.isNotBlank()) "ONU তালিকা ($selectedPort)" else "ONU তালিকা",
+            subtitle = subtitleText,
+            showActiveIndicator = selectedOlt != null,
+            isActive = selectedOlt != null,
+            actions = {
+                // এক্সপোর্ট ও ফিল্ড রিপোর্ট বাটন
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(BluePrimary.copy(alpha = 0.12f))
+                        .clickable { showExportDialog = true }
+                        .testTag("onu_export_report_btn"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Export Report",
+                        tint = BluePrimary,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
                 // রিফ্রেশ বাটন
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(BluePrimary.copy(alpha = 0.12f))
                         .clickable { viewModel.refreshActiveOltData() }
@@ -152,7 +167,7 @@ fun OnuListScreen(viewModel: MainViewModel) {
                 // সার্চ টগল বাটন
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .clickable { isSearchActive = !isSearchActive }
@@ -166,10 +181,16 @@ fun OnuListScreen(viewModel: MainViewModel) {
                         modifier = Modifier.size(20.dp)
                     )
                 }
-            }
-        }
+            },
+            testTag = "onu_app_header"
+        )
 
-        // সার্চ বার
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // সার্চ বার
         if (isSearchActive) {
             Spacer(modifier = Modifier.height(10.dp))
             GlobalSearchBar(
@@ -191,7 +212,9 @@ fun OnuListScreen(viewModel: MainViewModel) {
         ) {
             availablePorts.forEach { port ->
                 val isSelected = selectedPort == port
-                val portCount = onuList.count { it.port.startsWith(port) }
+                val portCount = onuList.count {
+                    it.port == port || it.port.startsWith("$port:") || it.port.substringBefore(":") == port
+                }
                 Surface(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
@@ -342,6 +365,9 @@ fun OnuListScreen(viewModel: MainViewModel) {
                             val clip = ClipData.newPlainText("ONU MAC", mac)
                             clipboard.setPrimaryClip(clip)
                             Toast.makeText(context, "MAC কপি করা হয়েছে: $mac", Toast.LENGTH_SHORT).show()
+                        },
+                        onQuickTest = {
+                            diagnosticOnu = onu
                         }
                     )
                 }
@@ -353,6 +379,63 @@ fun OnuListScreen(viewModel: MainViewModel) {
     }
 }
 
+    // --- গ্লোবাল এক্সপোর্ট / ফিল্ড টেকনিশিয়ান রিপোর্ট ডায়ালগ ---
+    if (showExportDialog) {
+        val reportContent = remember(selectedPort, selectedFilter, onuList) {
+            viewModel.generateOnuExportReport(selectedPort, selectedFilter)
+        }
+        GlobalExportDialog(
+            title = "ফিল্ড টেকনিশিয়ান রিপোর্ট (${if (selectedPort.isBlank()) "সকল পোর্ট" else selectedPort})",
+            reportText = reportContent,
+            onDismissRequest = { showExportDialog = false },
+            onCopyText = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = ClipData.newPlainText("OLT Field Report", reportContent)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(context, "রিপোর্ট ক্লিপবোর্ডে কপি করা হয়েছে!", Toast.LENGTH_SHORT).show()
+            },
+            onShareText = {
+                try {
+                    val sendIntent = Intent().apply {
+                        action = Intent.ACTION_SEND
+                        putExtra(Intent.EXTRA_TEXT, reportContent)
+                        type = "text/plain"
+                    }
+                    val shareIntent = Intent.createChooser(sendIntent, "ফিল্ড রিপোর্ট শেয়ার করুন")
+                    context.startActivity(shareIntent)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "শেয়ার করতে সমস্যা হয়েছে", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+
+    // --- একক ONU লাইভ ডায়াগনস্টিক ডায়ালগ ---
+    if (diagnosticOnu != null) {
+        val activeDiag = diagnosticOnu!!
+        GlobalQuickDiagnosticDialog(
+            onuUser = activeDiag.user,
+            port = activeDiag.port,
+            sn = activeDiag.sn,
+            mac = activeDiag.mac,
+            status = activeDiag.status,
+            rxPower = activeDiag.rx,
+            txPower = activeDiag.tx,
+            distance = activeDiag.distance,
+            isChecking = isCheckingDiagnostic,
+            onReCheck = {
+                isCheckingDiagnostic = true
+                viewModel.quickCheckOnuStatus(activeDiag) { updated ->
+                    diagnosticOnu = updated
+                    isCheckingDiagnostic = false
+                    Toast.makeText(context, "ONU টেস্ট সম্পন্ন হয়েছে!", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismissRequest = { diagnosticOnu = null }
+        )
+    }
+}
+
 /**
  * গ্রাহক প্রান্তের ONU ডিভাইস কার্ড:
  * শুধুমাত্র গ্রাহক সংক্রান্ত ডেটা ধারণ করে (BDCOM স্ট্যান্ডার্ড ফরম্যাট: 53-shanto, EPON0/1:1, MAC, SN, Rx, Tx, Distance, Uptime)
@@ -361,7 +444,8 @@ fun OnuListScreen(viewModel: MainViewModel) {
 fun OnuClientCard(
     onu: OnuItem,
     onCopySn: (String) -> Unit,
-    onCopyMac: (String) -> Unit
+    onCopyMac: (String) -> Unit,
+    onQuickTest: () -> Unit
 ) {
     val isOnline = onu.status.equals("online", ignoreCase = true)
     val isWireCut = onu.status.equals("wirecut", ignoreCase = true)
@@ -540,6 +624,35 @@ fun OnuClientCard(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // দ্রুত ডায়াগনস্টিক ও টেস্ট বাটন
+            OutlinedButton(
+                onClick = onQuickTest,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("onu_quick_diag_btn_${onu.id}"),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, BluePrimary.copy(alpha = 0.5f)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = BluePrimary
+                ),
+                contentPadding = PaddingValues(vertical = 6.dp, horizontal = 12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Speed,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "লাইভ অপটিক্যাল ডায়াগনস্টিক ও টেস্ট",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
+

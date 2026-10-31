@@ -82,34 +82,34 @@ data class OltItem(
 )
 
 data class TelemetryMetrics(
-    val cpuPercent: Int,
-    val ramPercent: Int,
-    val tempCelsius: Int,
-    val uptime: String = "1d 9h 21m 49s"
+    val cpuPercent: Int = 0,
+    val ramPercent: Int = 0,
+    val tempCelsius: Int = 0,
+    val uptime: String = "N/A"
 )
 
 data class DashboardData(
-    val deviceName: String = "BDCOM GP3600-08",
-    val ip: String = "192.168.1.100",
+    val deviceName: String = "কোন OLT নির্বাচিত নেই",
+    val ip: String = "",
     val snmpPort: Int = 161,
-    val uptime: String = "1d 9h 21m 49s",
-    val status: String = "online",
-    val cpuPercent: Int = 22,
-    val ramPercent: Int = 18,
-    val tempCelsius: Int = 49,
-    val totalSubscribers: Int = 248,
-    val onlineSubscribers: Int = 236,
-    val onlinePercent: Double = 95.1,
-    val powerOffSubscribers: Int = 4,
-    val powerOffPercent: Double = 1.6,
-    val wiredCutSubscribers: Int = 8,
-    val wiredCutPercent: Double = 3.3,
-    val activePonCount: Int = 8,
-    val totalPonCount: Int = 8,
-    val ponStatusText: String = "১০০% সচল",
-    val ponDescription: String = "সকল PON পোর্ট অপটিমাল মোডে কর্মরত",
-    val totalBars: Int = 8,
-    val activeBars: Int = 8
+    val uptime: String = "N/A",
+    val status: String = "offline",
+    val cpuPercent: Int = 0,
+    val ramPercent: Int = 0,
+    val tempCelsius: Int = 0,
+    val totalSubscribers: Int = 0,
+    val onlineSubscribers: Int = 0,
+    val onlinePercent: Double = 0.0,
+    val powerOffSubscribers: Int = 0,
+    val powerOffPercent: Double = 0.0,
+    val wiredCutSubscribers: Int = 0,
+    val wiredCutPercent: Double = 0.0,
+    val activePonCount: Int = 0,
+    val totalPonCount: Int = 0,
+    val ponStatusText: String = "০/০ সচল",
+    val ponDescription: String = "কোন OLT ডিভাইস যুক্ত করা হয়নি",
+    val totalBars: Int = 0,
+    val activeBars: Int = 0
 )
 
 data class NotificationItem(
